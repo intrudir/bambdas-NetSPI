@@ -4,125 +4,123 @@
  # Author: Jonathan Conesa
  **/
 
-if (requestResponse.finalRequest().path().contains("/api/apex/execute")) {
-    try {
-        // Check the HTTP method (GET or POST)
-        String httpMethod = requestResponse.finalRequest().method();
+// Helper: URL decode (handles single and double encoding)
+String urlDecode(String value) {
+    if (value == null || value.isEmpty()) return value;
 
-        if (httpMethod.equalsIgnoreCase("GET")) {
-            // Extract the full URL
-            String url = requestResponse.finalRequest().url();
+    for (int iteration = 0; iteration < 2; iteration++) {
+        StringBuilder decoded = new StringBuilder();
+        boolean wasDecoded = false;
 
-            // Locate the start of the query string
-            int queryStartIndex = url.indexOf("?");
-            if (queryStartIndex != -1) {
-                String queryString = url.substring(queryStartIndex + 1); // Extract query string
-                String[] params = queryString.split("&"); // Split into individual parameters
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
 
-                for (String param : params) {
-                    if (param.startsWith("method=")) {
-                        // Extract and return the value of the "method" parameter
-                        return param.substring(7); // Skip "method="
-                    }
+            if (c == '%' && i + 2 < value.length()) {
+                try {
+                    int hexValue = Integer.parseInt(value.substring(i + 1, i + 3), 16);
+                    decoded.append((char) hexValue);
+                    i += 2;
+                    wasDecoded = true;
+                } catch (NumberFormatException e) {
+                    decoded.append(c);
                 }
-                return "Error: 'method' key not found in query string";
+            } else if (c == '+') {
+                decoded.append(' ');
+                wasDecoded = true;
             } else {
-                return "Error: No query string found in URL";
+                decoded.append(c);
             }
-        } else if (httpMethod.equalsIgnoreCase("POST")) {
-            // Extract the request body as a string
-            String requestBody = requestResponse.finalRequest().bodyToString().trim();
-
-            // Ensure the body contains the "method" key
-            if (requestBody.contains("\"method\":\"")) {
-                int methodStartIndex = requestBody.indexOf("\"method\":\"") + 10; // Skip past "method":" length
-                int methodEndIndex = requestBody.indexOf("\"", methodStartIndex);
-
-                // Extract and return the "method" value
-                return requestBody.substring(methodStartIndex, methodEndIndex);
-            } else {
-                return "Error: 'method' key not found in body";
-            }
-        } else {
-            return "Error: Unsupported HTTP method " + httpMethod;
         }
-    } catch (Exception e) {
-        // Return error details in case of an exception
-        return "Error: Exception while processing - " + e.getMessage();
+
+        value = decoded.toString();
+        if (!wasDecoded) break;
     }
-}  else if (requestResponse.finalRequest().path().contains("/aura")) {
-    try {
-        // Check the HTTP method (GET or POST)
-        String httpMethod = requestResponse.finalRequest().method();
 
-        if (httpMethod.equalsIgnoreCase("GET")) {
-            // For GET requests, check query string for method parameter
-            String url = requestResponse.finalRequest().url();
-            int queryStartIndex = url.indexOf("?");
-
-            if (queryStartIndex != -1) {
-                String queryString = url.substring(queryStartIndex + 1);
-                String[] params = queryString.split("&");
-
-                for (String param : params) {
-                    if (param.startsWith("method=")) {
-                        // URL decode if needed and return the method value
-                        String methodValue = param.substring(7); // Skip "method="
-                        // Handle URL-encoded values
-                        try {
-                            return java.net.URLDecoder.decode(methodValue, "UTF-8");
-                        } catch (Exception e) {
-                            return methodValue; // Return as-is if decode fails
-                        }
-                    }
-                }
-            }
-            // No method found in query string, return empty
-
-        } else if (httpMethod.equalsIgnoreCase("POST")) {
-            // Extract the request body as a string
-            String requestBody = requestResponse.finalRequest().bodyToString().trim();
-
-            // Check if body contains aura execute command (URL-encoded or plain)
-            if (requestBody.contains("ACTION%24execute") || requestBody.contains("ACTION$execute")) {
-                // Try URL-encoded pattern first: %22method%22%3A%22
-                int methodStartIndex = requestBody.indexOf("%22method%22%3A%22");
-                String methodPattern;
-                int patternLength;
-
-                if (methodStartIndex != -1) {
-                    // URL-encoded pattern found
-                    methodPattern = "%22";
-                    patternLength = 18; // Length of %22method%22%3A%22
-                    methodStartIndex += patternLength;
-                } else {
-                    // Try plain JSON pattern: "method":"
-                    methodStartIndex = requestBody.indexOf("\"method\":\"");
-                    if (methodStartIndex != -1) {
-                        methodPattern = "\"";
-                        patternLength = 10; // Length of "method":"
-                        methodStartIndex += patternLength;
-                    } else {
-                        return "Error: 'method' key not found in aura request";
-                    }
-                }
-
-                // Find the closing quote/delimiter
-                int methodEndIndex = requestBody.indexOf(methodPattern, methodStartIndex);
-
-                // Extract and return the "method" value
-                if (methodEndIndex > methodStartIndex) {
-                    return requestBody.substring(methodStartIndex, methodEndIndex);
-                } else {
-                    return "Error: 'method' value not properly terminated";
-                }
-            }
-            // If not an aura execute command, return empty (don't error on auraCmpDef etc.)
-        }
-    } catch (Exception e) {
-        // Return error details in case of an exception
-        return "Error: Exception while processing - " + e.getMessage();
-    }
+    return value;
 }
-// Return empty string if the request doesn't match the target criteria
+
+// Helper: Extract method from query string
+String extractMethodFromQuery(String url) {
+    int queryStart = url.indexOf("?");
+    if (queryStart == -1) return null;
+
+    String[] params = url.substring(queryStart + 1).split("&");
+    for (String param : params) {
+        if (param.startsWith("method=")) {
+            return urlDecode(param.substring(7));
+        }
+    }
+    return null;
+}
+
+String path = requestResponse.finalRequest().path();
+String method = requestResponse.finalRequest().method();
+
+try {
+    // Handle /api/apex/execute
+    if (path.contains("/api/apex/execute")) {
+        if (method.equalsIgnoreCase("GET")) {
+            String extracted = extractMethodFromQuery(requestResponse.finalRequest().url());
+            if (extracted != null) return extracted;
+            return "Error: 'method' key not found in query string";
+
+        } else if (method.equalsIgnoreCase("POST")) {
+            String body = requestResponse.finalRequest().bodyToString().trim();
+            int start = body.indexOf("\"method\":\"");
+
+            if (start != -1) {
+                start += 10;
+                int end = body.indexOf("\"", start);
+                if (end > start) {
+                    return urlDecode(body.substring(start, end));
+                }
+            }
+            return "Error: 'method' key not found in body";
+        }
+    }
+
+    // Handle /aura
+    else if (path.contains("/aura")) {
+        if (method.equalsIgnoreCase("GET")) {
+            String extracted = extractMethodFromQuery(requestResponse.finalRequest().url());
+            if (extracted != null) return extracted;
+            // Return empty for GET /aura without method param
+
+        } else if (method.equalsIgnoreCase("POST")) {
+            String body = requestResponse.finalRequest().bodyToString().trim();
+
+            // Only process if it's an ACTION execute command
+            if (!body.contains("ACTION%24execute") && !body.contains("ACTION$execute")) {
+                return ""; // Not an execute command, ignore
+            }
+
+            // Try URL-encoded pattern: %22method%22%3A%22
+            int start = body.indexOf("%22method%22%3A%22");
+            String delimiter;
+
+            if (start != -1) {
+                start += 18;
+                delimiter = "%22";
+            } else {
+                // Try plain JSON pattern: "method":"
+                start = body.indexOf("\"method\":\"");
+                if (start == -1) {
+                    return "Error: 'method' key not found in aura request";
+                }
+                start += 10;
+                delimiter = "\"";
+            }
+
+            int end = body.indexOf(delimiter, start);
+            if (end > start) {
+                return urlDecode(body.substring(start, end));
+            }
+            return "Error: 'method' value not properly terminated";
+        }
+    }
+
+} catch (Exception e) {
+    return "Error: " + e.getMessage();
+}
+
 return "";
