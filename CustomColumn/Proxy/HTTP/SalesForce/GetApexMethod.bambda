@@ -54,7 +54,32 @@ if (requestResponse.finalRequest().path().contains("/api/apex/execute")) {
     try {
         // Check the HTTP method (GET or POST)
         String httpMethod = requestResponse.finalRequest().method();
-        if (httpMethod.equalsIgnoreCase("POST")) {
+
+        if (httpMethod.equalsIgnoreCase("GET")) {
+            // For GET requests, check query string for method parameter
+            String url = requestResponse.finalRequest().url();
+            int queryStartIndex = url.indexOf("?");
+
+            if (queryStartIndex != -1) {
+                String queryString = url.substring(queryStartIndex + 1);
+                String[] params = queryString.split("&");
+
+                for (String param : params) {
+                    if (param.startsWith("method=")) {
+                        // URL decode if needed and return the method value
+                        String methodValue = param.substring(7); // Skip "method="
+                        // Handle URL-encoded values
+                        try {
+                            return java.net.URLDecoder.decode(methodValue, "UTF-8");
+                        } catch (Exception e) {
+                            return methodValue; // Return as-is if decode fails
+                        }
+                    }
+                }
+            }
+            // No method found in query string, return empty
+
+        } else if (httpMethod.equalsIgnoreCase("POST")) {
             // Extract the request body as a string
             String requestBody = requestResponse.finalRequest().bodyToString().trim();
 
@@ -91,11 +116,8 @@ if (requestResponse.finalRequest().path().contains("/api/apex/execute")) {
                 } else {
                     return "Error: 'method' value not properly terminated";
                 }
-            } else {
-                return "Error: Not an Aura execute command";
             }
-        } else {
-            return "Error: Unsupported HTTP method " + httpMethod;
+            // If not an aura execute command, return empty (don't error on auraCmpDef etc.)
         }
     } catch (Exception e) {
         // Return error details in case of an exception
