@@ -50,7 +50,7 @@ if (requestResponse.finalRequest().path().contains("/api/apex/execute")) {
         // Return error details in case of an exception
         return "Error: Exception while processing - " + e.getMessage();
     }
-}  else if (requestResponse.finalRequest().path().contains("/sfsites/aura")) {
+}  else if (requestResponse.finalRequest().path().contains("/aura")) {
     try {
         // Check the HTTP method (GET or POST)
         String httpMethod = requestResponse.finalRequest().method();
@@ -58,13 +58,41 @@ if (requestResponse.finalRequest().path().contains("/api/apex/execute")) {
             // Extract the request body as a string
             String requestBody = requestResponse.finalRequest().bodyToString().trim();
 
-            // Ensure the body contains the aura "execute" command
-            if (requestBody.contains("ACTION%24execute")) {
-                int methodStartIndex = requestBody.indexOf("%22method%22%3A%22") + 18; // Skip past "method":" length
-                int methodEndIndex = requestBody.indexOf("%22", methodStartIndex);
+            // Check if body contains aura execute command (URL-encoded or plain)
+            if (requestBody.contains("ACTION%24execute") || requestBody.contains("ACTION$execute")) {
+                // Try URL-encoded pattern first: %22method%22%3A%22
+                int methodStartIndex = requestBody.indexOf("%22method%22%3A%22");
+                String methodPattern;
+                int patternLength;
+
+                if (methodStartIndex != -1) {
+                    // URL-encoded pattern found
+                    methodPattern = "%22";
+                    patternLength = 18; // Length of %22method%22%3A%22
+                    methodStartIndex += patternLength;
+                } else {
+                    // Try plain JSON pattern: "method":"
+                    methodStartIndex = requestBody.indexOf("\"method\":\"");
+                    if (methodStartIndex != -1) {
+                        methodPattern = "\"";
+                        patternLength = 10; // Length of "method":"
+                        methodStartIndex += patternLength;
+                    } else {
+                        return "Error: 'method' key not found in aura request";
+                    }
+                }
+
+                // Find the closing quote/delimiter
+                int methodEndIndex = requestBody.indexOf(methodPattern, methodStartIndex);
 
                 // Extract and return the "method" value
-                return requestBody.substring(methodStartIndex, methodEndIndex);
+                if (methodEndIndex > methodStartIndex) {
+                    return requestBody.substring(methodStartIndex, methodEndIndex);
+                } else {
+                    return "Error: 'method' value not properly terminated";
+                }
+            } else {
+                return "Error: Not an Aura execute command";
             }
         } else {
             return "Error: Unsupported HTTP method " + httpMethod;
