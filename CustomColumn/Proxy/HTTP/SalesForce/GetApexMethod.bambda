@@ -4,67 +4,53 @@
  # Author: Jonathan Conesa
  **/
 
-// Helper: URL decode (handles single and double encoding)
-String urlDecode(String value) {
-    if (value == null || value.isEmpty()) return value;
+if (requestResponse.finalRequest().path().contains("/api/apex/execute")) {
+    try {
+        String httpMethod = requestResponse.finalRequest().method();
 
-    for (int iteration = 0; iteration < 2; iteration++) {
-        StringBuilder decoded = new StringBuilder();
-        boolean wasDecoded = false;
+        if (httpMethod.equalsIgnoreCase("GET")) {
+            String url = requestResponse.finalRequest().url();
+            int queryStart = url.indexOf("?");
 
-        for (int i = 0; i < value.length(); i++) {
-            char c = value.charAt(i);
+            if (queryStart != -1) {
+                String[] params = url.substring(queryStart + 1).split("&");
+                for (String param : params) {
+                    if (param.startsWith("method=")) {
+                        String value = param.substring(7);
 
-            if (c == '%' && i + 2 < value.length()) {
-                try {
-                    int hexValue = Integer.parseInt(value.substring(i + 1, i + 3), 16);
-                    decoded.append((char) hexValue);
-                    i += 2;
-                    wasDecoded = true;
-                } catch (NumberFormatException e) {
-                    decoded.append(c);
+                        // URL decode (handles double encoding)
+                        for (int iter = 0; iter < 2; iter++) {
+                            StringBuilder decoded = new StringBuilder();
+                            boolean wasDecoded = false;
+
+                            for (int i = 0; i < value.length(); i++) {
+                                char c = value.charAt(i);
+                                if (c == '%' && i + 2 < value.length()) {
+                                    try {
+                                        decoded.append((char) Integer.parseInt(value.substring(i + 1, i + 3), 16));
+                                        i += 2;
+                                        wasDecoded = true;
+                                    } catch (NumberFormatException e) {
+                                        decoded.append(c);
+                                    }
+                                } else if (c == '+') {
+                                    decoded.append(' ');
+                                    wasDecoded = true;
+                                } else {
+                                    decoded.append(c);
+                                }
+                            }
+                            value = decoded.toString();
+                            if (!wasDecoded) break;
+                        }
+                        return value;
+                    }
                 }
-            } else if (c == '+') {
-                decoded.append(' ');
-                wasDecoded = true;
-            } else {
-                decoded.append(c);
+                return "Error: 'method' key not found in query string";
             }
-        }
+            return "Error: No query string found in URL";
 
-        value = decoded.toString();
-        if (!wasDecoded) break;
-    }
-
-    return value;
-}
-
-// Helper: Extract method from query string
-String extractMethodFromQuery(String url) {
-    int queryStart = url.indexOf("?");
-    if (queryStart == -1) return null;
-
-    String[] params = url.substring(queryStart + 1).split("&");
-    for (String param : params) {
-        if (param.startsWith("method=")) {
-            return urlDecode(param.substring(7));
-        }
-    }
-    return null;
-}
-
-String path = requestResponse.finalRequest().path();
-String method = requestResponse.finalRequest().method();
-
-try {
-    // Handle /api/apex/execute
-    if (path.contains("/api/apex/execute")) {
-        if (method.equalsIgnoreCase("GET")) {
-            String extracted = extractMethodFromQuery(requestResponse.finalRequest().url());
-            if (extracted != null) return extracted;
-            return "Error: 'method' key not found in query string";
-
-        } else if (method.equalsIgnoreCase("POST")) {
+        } else if (httpMethod.equalsIgnoreCase("POST")) {
             String body = requestResponse.finalRequest().bodyToString().trim();
             int start = body.indexOf("\"method\":\"");
 
@@ -72,55 +58,144 @@ try {
                 start += 10;
                 int end = body.indexOf("\"", start);
                 if (end > start) {
-                    return urlDecode(body.substring(start, end));
+                    String value = body.substring(start, end);
+
+                    // URL decode
+                    for (int iter = 0; iter < 2; iter++) {
+                        StringBuilder decoded = new StringBuilder();
+                        boolean wasDecoded = false;
+
+                        for (int i = 0; i < value.length(); i++) {
+                            char c = value.charAt(i);
+                            if (c == '%' && i + 2 < value.length()) {
+                                try {
+                                    decoded.append((char) Integer.parseInt(value.substring(i + 1, i + 3), 16));
+                                    i += 2;
+                                    wasDecoded = true;
+                                } catch (NumberFormatException e) {
+                                    decoded.append(c);
+                                }
+                            } else if (c == '+') {
+                                decoded.append(' ');
+                                wasDecoded = true;
+                            } else {
+                                decoded.append(c);
+                            }
+                        }
+                        value = decoded.toString();
+                        if (!wasDecoded) break;
+                    }
+                    return value;
                 }
             }
             return "Error: 'method' key not found in body";
         }
+    } catch (Exception e) {
+        return "Error: " + e.getMessage();
     }
 
-    // Handle /aura
-    else if (path.contains("/aura")) {
-        if (method.equalsIgnoreCase("GET")) {
-            String extracted = extractMethodFromQuery(requestResponse.finalRequest().url());
-            if (extracted != null) return extracted;
-            // Return empty for GET /aura without method param
+} else if (requestResponse.finalRequest().path().contains("/aura")) {
+    try {
+        String httpMethod = requestResponse.finalRequest().method();
 
-        } else if (method.equalsIgnoreCase("POST")) {
+        if (httpMethod.equalsIgnoreCase("GET")) {
+            String url = requestResponse.finalRequest().url();
+            int queryStart = url.indexOf("?");
+
+            if (queryStart != -1) {
+                String[] params = url.substring(queryStart + 1).split("&");
+                for (String param : params) {
+                    if (param.startsWith("method=")) {
+                        String value = param.substring(7);
+
+                        // URL decode
+                        for (int iter = 0; iter < 2; iter++) {
+                            StringBuilder decoded = new StringBuilder();
+                            boolean wasDecoded = false;
+
+                            for (int i = 0; i < value.length(); i++) {
+                                char c = value.charAt(i);
+                                if (c == '%' && i + 2 < value.length()) {
+                                    try {
+                                        decoded.append((char) Integer.parseInt(value.substring(i + 1, i + 3), 16));
+                                        i += 2;
+                                        wasDecoded = true;
+                                    } catch (NumberFormatException e) {
+                                        decoded.append(c);
+                                    }
+                                } else if (c == '+') {
+                                    decoded.append(' ');
+                                    wasDecoded = true;
+                                } else {
+                                    decoded.append(c);
+                                }
+                            }
+                            value = decoded.toString();
+                            if (!wasDecoded) break;
+                        }
+                        return value;
+                    }
+                }
+            }
+            // No method in query string, return empty
+
+        } else if (httpMethod.equalsIgnoreCase("POST")) {
             String body = requestResponse.finalRequest().bodyToString().trim();
 
-            // Only process if it's an ACTION execute command
-            if (!body.contains("ACTION%24execute") && !body.contains("ACTION$execute")) {
-                return ""; // Not an execute command, ignore
-            }
+            // Only process ACTION execute commands
+            if (body.contains("ACTION%24execute") || body.contains("ACTION$execute")) {
+                int start = body.indexOf("%22method%22%3A%22");
+                String delimiter;
 
-            // Try URL-encoded pattern: %22method%22%3A%22
-            int start = body.indexOf("%22method%22%3A%22");
-            String delimiter;
-
-            if (start != -1) {
-                start += 18;
-                delimiter = "%22";
-            } else {
-                // Try plain JSON pattern: "method":"
-                start = body.indexOf("\"method\":\"");
-                if (start == -1) {
-                    return "Error: 'method' key not found in aura request";
+                if (start != -1) {
+                    start += 18;
+                    delimiter = "%22";
+                } else {
+                    start = body.indexOf("\"method\":\"");
+                    if (start == -1) {
+                        return "Error: 'method' key not found in aura request";
+                    }
+                    start += 10;
+                    delimiter = "\"";
                 }
-                start += 10;
-                delimiter = "\"";
-            }
 
-            int end = body.indexOf(delimiter, start);
-            if (end > start) {
-                return urlDecode(body.substring(start, end));
+                int end = body.indexOf(delimiter, start);
+                if (end > start) {
+                    String value = body.substring(start, end);
+
+                    // URL decode
+                    for (int iter = 0; iter < 2; iter++) {
+                        StringBuilder decoded = new StringBuilder();
+                        boolean wasDecoded = false;
+
+                        for (int i = 0; i < value.length(); i++) {
+                            char c = value.charAt(i);
+                            if (c == '%' && i + 2 < value.length()) {
+                                try {
+                                    decoded.append((char) Integer.parseInt(value.substring(i + 1, i + 3), 16));
+                                    i += 2;
+                                    wasDecoded = true;
+                                } catch (NumberFormatException e) {
+                                    decoded.append(c);
+                                }
+                            } else if (c == '+') {
+                                decoded.append(' ');
+                                wasDecoded = true;
+                            } else {
+                                decoded.append(c);
+                            }
+                        }
+                        value = decoded.toString();
+                        if (!wasDecoded) break;
+                    }
+                    return value;
+                }
+                return "Error: 'method' value not properly terminated";
             }
-            return "Error: 'method' value not properly terminated";
         }
+    } catch (Exception e) {
+        return "Error: " + e.getMessage();
     }
-
-} catch (Exception e) {
-    return "Error: " + e.getMessage();
 }
 
 return "";
